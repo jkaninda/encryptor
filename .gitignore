@@ -1,0 +1,6 @@
+/.history
+.DS_Store
+/.idea
+bin
+Makefile
+tests

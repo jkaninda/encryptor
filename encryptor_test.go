@@ -11,10 +11,10 @@ import (
 
 const passPhrase = "Hello World"
 const content = "Lorem ipsum dolor sit amet. Eum eius voluptas sit vitae vitae aut sequi molestias hic accusamus consequatur et molestiae quidem et omnis molestias eos nemo iusto. Eos beatae maxime et sapiente provident quo nobis aspernatur ut recusandae dolores sit dolor excepturi et esse amet et aliquid recusandae. Id perferendis facere aut accusamus eveniet et incidunt doloremque est nisi distinctio a quas quos ea ipsam tenetur."
-const privateKeyFile = "tests/private.pem"
-const publicKeyFile = "tests/public.pem"
-const inputFile = "tests/testEncrypts.txt"
-const outputFile = "tests/testEncrypts.txt.gpg"
+const privateKeyFile = "private.pem"
+const publicKeyFile = "public.pem"
+const inputFile = "testEncrypts.txt"
+const outputFile = "testEncrypts.txt.gpg"
 
 func TestEncrypts(t *testing.T) {
 	fileBytes, err := createFile(inputFile, content)

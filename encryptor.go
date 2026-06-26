@@ -7,121 +7,138 @@
 package encryptor
 
 import (
-	"errors"
 	"fmt"
-	"github.com/ProtonMail/gopenpgp/v2/crypto"
 	"os"
+	"strings"
+
+	"github.com/ProtonMail/gopenpgp/v2/crypto"
 )
+
+// pgpMessageHeader marks the start of an ASCII-armored PGP message.
+const pgpMessageHeader = "-----BEGIN PGP MESSAGE-----"
+
+// outputFileMode is the permission applied to files written by this package.
+const outputFileMode = 0o644
+
+// writeOutputFile writes data to outputFile, wrapping any failure with context.
+func writeOutputFile(outputFile string, data []byte) error {
+	if err := os.WriteFile(outputFile, data, outputFileMode); err != nil {
+		return fmt.Errorf("error saving file %q: %w", outputFile, err)
+	}
+	return nil
+}
+
+// EncryptString encrypts data with a passphrase and returns an ASCII-armored
+// PGP message suitable for embedding in text/YAML/JSON configuration.
+func EncryptString(data []byte, passphrase string) (string, error) {
+	message := crypto.NewPlainMessage(data)
+	encrypted, err := crypto.EncryptMessageWithPassword(message, []byte(passphrase))
+	if err != nil {
+		return "", fmt.Errorf("error encrypting data: %w", err)
+	}
+	armored, err := encrypted.GetArmored()
+	if err != nil {
+		return "", fmt.Errorf("error armoring encrypted data: %w", err)
+	}
+	return armored, nil
+}
+
+// DecryptString decrypts an ASCII-armored PGP message produced by EncryptString
+// using the same passphrase.
+func DecryptString(armored, passphrase string) ([]byte, error) {
+	message, err := crypto.NewPGPMessageFromArmored(armored)
+	if err != nil {
+		return nil, fmt.Errorf("error reading armored message: %w", err)
+	}
+	decrypted, err := crypto.DecryptMessageWithPassword(message, []byte(passphrase))
+	if err != nil {
+		return nil, fmt.Errorf("error decrypting data: %w", err)
+	}
+	return decrypted.GetBinary(), nil
+}
+
+// IsEncrypted reports whether s looks like an ASCII-armored PGP message.
+func IsEncrypted(s string) bool {
+	return strings.Contains(s, pgpMessageHeader)
+}
 
 // Encrypt encrypts a file using a passphrase
 func Encrypt(inputFileBytes []byte, outputFile string, passphrase string) error {
-	// Define the passphrase to encrypt the file
-	_passphrase := []byte(passphrase)
-
-	// Create a message object from the file content
 	message := crypto.NewPlainMessage(inputFileBytes)
-	// Encrypt the message using the passphrase
-	encryptedMessage, err := crypto.EncryptMessageWithPassword(message, _passphrase)
+
+	encryptedMessage, err := crypto.EncryptMessageWithPassword(message, []byte(passphrase))
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error encrypting file: %s", err))
+		return fmt.Errorf("error encrypting file: %w", err)
 	}
-	// Save the encrypted file
-	err = os.WriteFile(outputFile, encryptedMessage.GetBinary(), 0644)
-	if err != nil {
-		return errors.New(fmt.Sprintf("Error saving encrypted filee: %s", err))
-	}
-	return nil
+
+	return writeOutputFile(outputFile, encryptedMessage.GetBinary())
 }
 
 // EncryptWithPublicKey encrypts a file using a public key
 func EncryptWithPublicKey(inputFileBytes []byte, outputFile string, pubKeyBytes []byte) error {
-	// Create a new keyring with the public key
 	publicKeyObj, err := crypto.NewKeyFromArmored(string(pubKeyBytes))
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error parsing public key: %s", err))
+		return fmt.Errorf("error parsing public key: %w", err)
 	}
 
+	// Create a new keyring with the public key
 	keyRing, err := crypto.NewKeyRing(publicKeyObj)
 	if err != nil {
-
-		return errors.New(fmt.Sprintf("Error creating key ring: %v", err))
+		return fmt.Errorf("error creating key ring: %w", err)
 	}
 
-	// encryptWithGPG the file
+	// Encrypt the file
 	message := crypto.NewPlainMessage(inputFileBytes)
 	encMessage, err := keyRing.Encrypt(message, nil)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error encrypting file: %v", err))
+		return fmt.Errorf("error encrypting file: %w", err)
 	}
 
-	// Save the encrypted file
-	err = os.WriteFile(outputFile, encMessage.GetBinary(), 0644)
-	if err != nil {
-		return errors.New(fmt.Sprintf("Error saving encrypted file: %v", err))
-	}
-	return nil
-
+	return writeOutputFile(outputFile, encMessage.GetBinary())
 }
 
 // Decrypt decrypts a file using passphrase
 func Decrypt(inputFileBytes []byte, outputFile string, passphrase string) error {
-	// Define the passphrase used to encrypt the file
-	_passphrase := []byte(passphrase)
 	// Create a PGP message object from the encrypted file content
 	encryptedMessage := crypto.NewPGPMessage(inputFileBytes)
+
 	// Decrypt the message using the passphrase
-	plainMessage, err := crypto.DecryptMessageWithPassword(encryptedMessage, _passphrase)
+	plainMessage, err := crypto.DecryptMessageWithPassword(encryptedMessage, []byte(passphrase))
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error decrypting file: %s", err))
+		return fmt.Errorf("error decrypting file: %w", err)
 	}
 
-	// Save the decrypted file (restore it)
-	err = os.WriteFile(outputFile, plainMessage.GetBinary(), 0644)
-	if err != nil {
-		return errors.New(fmt.Sprintf("Error saving decrypted file: %s", err))
-	}
-	return nil
+	return writeOutputFile(outputFile, plainMessage.GetBinary())
 }
 
 // DecryptWithPrivateKey decrypts a file using a private key and passphrase.
 func DecryptWithPrivateKey(inputFileBytes []byte, outputFile string, privateKey []byte, passphrase string) error {
 
-	// Read the password for the private key (if it’s password-protected)
-	password := []byte(passphrase)
-
 	// Create a key object from the armored private key
 	privateKeyObj, err := crypto.NewKeyFromArmored(string(privateKey))
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error parsing private key: %s", err))
+		return fmt.Errorf("error parsing private key: %w", err)
 	}
 
-	// Unlock the private key with the password
 	if passphrase != "" {
-		// Unlock the private key with the password
-		_, err = privateKeyObj.Unlock(password)
+		privateKeyObj, err = privateKeyObj.Unlock([]byte(passphrase))
 		if err != nil {
-			return errors.New(fmt.Sprintf("Error unlocking private key: %s", err))
+			return fmt.Errorf("error unlocking private key: %w", err)
 		}
-
 	}
 
-	// Create a new keyring with the private key
+	// Create a new keyring with the unlocked private key
 	keyRing, err := crypto.NewKeyRing(privateKeyObj)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error creating key ring: %v", err))
+		return fmt.Errorf("error creating key ring: %w", err)
 	}
 
-	// decryptWithGPG the file
+	// Decrypt the file
 	encryptedMessage := crypto.NewPGPMessage(inputFileBytes)
 	message, err := keyRing.Decrypt(encryptedMessage, nil, 0)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error decrypting file: %s", err))
+		return fmt.Errorf("error decrypting file: %w", err)
 	}
 
-	// Save the decrypted file
-	err = os.WriteFile(outputFile, message.GetBinary(), 0644)
-	if err != nil {
-		return errors.New(fmt.Sprintf("Error saving decrypted file: %s", err))
-	}
-	return nil
+	return writeOutputFile(outputFile, message.GetBinary())
 }

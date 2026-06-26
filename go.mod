@@ -1,6 +1,6 @@
 module github.com/jkaninda/encryptor
 
-go 1.21.0
+go 1.25.1
 
 require github.com/ProtonMail/gopenpgp/v2 v2.8.0
 

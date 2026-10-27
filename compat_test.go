@@ -100,7 +100,9 @@ func TestCLIInterop(t *testing.T) {
 			}
 			return out
 		}
-		run(nil, "--passphrase", fixtureKeyPw, "--import", filepath.Join("testdata", "fixture_private.asc"))
+
+		run(nil, "--passphrase", "", "--quick-gen-key", "Encryptor CLI Test <cli@example.com>", "default", "default", "never")
+		pub := run(nil, "--export", "cli@example.com")
 
 		pass := encryptBytes(t, must[Encrypter](t)(GPGPassphrase([]byte("cli-pass"))), plain)
 		if got := run(pass, "--passphrase", "cli-pass", "--decrypt"); !bytes.Equal(got, plain) {
@@ -110,8 +112,8 @@ func TestCLIInterop(t *testing.T) {
 		if got := run(passArmor, "--passphrase", "cli-pass", "--decrypt"); !bytes.Equal(got, plain) {
 			t.Fatal("gpg decrypted armored passphrase message to different bytes")
 		}
-		keyed := encryptBytes(t, must[Encrypter](t)(GPGRecipients([][]byte{readTestdata(t, "fixture_public.asc")})), plain)
-		if got := run(keyed, "--passphrase", fixtureKeyPw, "--decrypt"); !bytes.Equal(got, plain) {
+		keyed := encryptBytes(t, must[Encrypter](t)(GPGRecipients([][]byte{pub})), plain)
+		if got := run(keyed, "--decrypt"); !bytes.Equal(got, plain) {
 			t.Fatal("gpg decrypted public-key message to different bytes")
 		}
 	})
